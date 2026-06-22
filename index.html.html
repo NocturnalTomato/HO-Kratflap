@@ -401,6 +401,7 @@
           <div class="gameover-score" id="finalScore">0</div>
           <p id="pbLine" class="pb-line"></p>
           <button id="retryBtn">Nog een poging</button>
+          <button class="secondary" id="shareBtn">Deel score</button>
           <button class="secondary" id="menuBtn">Highscores bekijken</button>
         </div>
       </div>
@@ -427,6 +428,7 @@
       const finalScore = document.getElementById("finalScore");
       const deathLine = document.getElementById("deathLine");
       const resetScoresBtn = document.getElementById("resetScoresBtn");
+      const shareBtn = document.getElementById("shareBtn");
 
       const API_BASE = "https://ho-kratflap-api.lucdegoeij.workers.dev";
       const STORAGE_KEY = "hokrat_kratflap_scores_v2";
@@ -896,8 +898,29 @@
         finalScore.textContent = score;
         pbLineEl.textContent = isPB ? "Nieuw persoonlijk record!" : "";
         deathLine.textContent = pickDeathLine(score, lastKillKind);
+        shareBtn.dataset.shareScore = score;
+        shareBtn.dataset.shareName = name;
+        shareBtn.textContent = "Deel score";
         setTimeout(() => gameOverScreen.classList.add("show"), 330);
       }
+
+      shareBtn.addEventListener("click", async () => {
+        const s = Number(shareBtn.dataset.shareScore) || 0;
+        const n = shareBtn.dataset.shareName || "iemand";
+        const text = `${n} haalde ${s} bij HO Kratflap 🏑 Durf jij het beter?`;
+        const url = location.href.split("?")[0];
+        try {
+          if (navigator.share) {
+            await navigator.share({ title: "HO Kratflap", text, url });
+          } else {
+            await navigator.clipboard.writeText(`${text}\n${url}`);
+            shareBtn.textContent = "Gekopieerd!";
+            setTimeout(() => { shareBtn.textContent = "Deel score"; }, 2000);
+          }
+        } catch {
+          // user cancelled or no clipboard access — silently ignore
+        }
+      });
 
       function draw() {
         const sx = shake ? (Math.random() - .5) * shake : 0;
