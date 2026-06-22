@@ -287,11 +287,39 @@
       color: var(--muted);
     }
 
-    .worst {
-      margin-top: 10px;
-      color: #777;
-      font-size: 11px;
-      text-align: center;
+    .toast {
+      position: absolute;
+      top: 36%;
+      left: 50%;
+      transform: translateX(-50%) scale(0.85);
+      background: rgba(255,255,255,.13);
+      backdrop-filter: blur(8px);
+      border: 1px solid rgba(255,255,255,.22);
+      border-radius: 20px;
+      padding: 8px 20px;
+      font-size: 17px;
+      font-weight: 900;
+      color: #fff;
+      letter-spacing: .06em;
+      pointer-events: none;
+      opacity: 0;
+      transition: opacity .18s, transform .18s;
+      z-index: 20;
+      white-space: nowrap;
+    }
+    .toast.show {
+      opacity: 1;
+      transform: translateX(-50%) scale(1);
+    }
+
+    .pb-line {
+      margin-top: 6px;
+      color: #aaffaa;
+      font-size: 13px;
+      font-weight: 800;
+      text-transform: uppercase;
+      letter-spacing: .1em;
+      min-height: 18px;
     }
 
     .gameover-score {
@@ -320,6 +348,7 @@
   <div id="app">
     <div class="phone-frame" id="frame">
       <canvas id="game"></canvas>
+      <div id="toast" class="toast"></div>
 
       <div class="hud">
         <div class="topbar">
@@ -337,7 +366,7 @@
       <div class="screen show" id="startScreen">
         <div class="card">
           <h1>Kratflap</h1>
-          <p class="tagline">Een schrale kutgame voor tussen twee HO-kratten in.</p>
+          <p class="tagline" id="startTagline">Een schrale kutgame voor tussen twee HO-kratten in.</p>
 
           <div class="controls">
             Tik ergens op het scherm om het kratje te laten flappen. Ontwijk sticks, ballen, pionnen en andere hockeymeuk. Raak je iets, dan is het krat gevallen en mag iemand anders halen.
@@ -360,7 +389,6 @@
               <ol id="weekList"></ol>
             </div>
           </div>
-          <div class="worst" id="worstWeek"></div>
           <button class="secondary danger-lite" id="resetScoresBtn" type="button">Wis lokale highscores</button>
           <p class="tiny">Highscores worden ook gesynchroniseerd naar de HO-Krat app.</p>
         </div>
@@ -371,6 +399,7 @@
           <h1>Krat gevallen.</h1>
           <p class="tagline" id="deathLine">De hockeygoden zijn teleurgesteld.</p>
           <div class="gameover-score" id="finalScore">0</div>
+          <p id="pbLine" class="pb-line"></p>
           <button id="retryBtn">Nog een poging</button>
           <button class="secondary" id="menuBtn">Highscores bekijken</button>
         </div>
@@ -395,7 +424,6 @@
       const playerNameInput = document.getElementById("playerName");
       const allTimeList = document.getElementById("allTimeList");
       const weekList = document.getElementById("weekList");
-      const worstWeek = document.getElementById("worstWeek");
       const finalScore = document.getElementById("finalScore");
       const deathLine = document.getElementById("deathLine");
       const resetScoresBtn = document.getElementById("resetScoresBtn");
@@ -416,6 +444,25 @@
       let lastTime = 0;
       let t = 0;
       let score = 0;
+      let lastKillKind = null;
+      let lastMilestone = 0;
+      let toastTimer = null;
+
+      const toastEl = document.getElementById("toast");
+      const pbLineEl = document.getElementById("pbLine");
+
+      function showToast(text) {
+        toastEl.textContent = text;
+        toastEl.classList.add("show");
+        if (toastTimer) clearTimeout(toastTimer);
+        toastTimer = setTimeout(() => toastEl.classList.remove("show"), 1600);
+      }
+
+      function getPersonalBest(name) {
+        const scores = getScores();
+        const mine = scores.filter(s => s.name === name);
+        return mine.length ? Math.max(...mine.map(s => s.score)) : 0;
+      }
       let nextObstacleIn = 0;
       let obstacles = [];
       let particles = [];
@@ -430,16 +477,132 @@
         rot: 0
       };
 
-      const deathLines = [
-        "Het krat had geen bitje in.",
-        "Strafcorner tegen. Krat kwijt.",
-        "De Spiritueel Leider keek even weg.",
-        "Dat was geen sprong, dat was administratie.",
-        "Hockeybal 1, krat 0.",
-        "Volgende keer lager insteken.",
-        "Je kratcontrole is matig.",
-        "De dug-out wil afstand nemen van deze actie."
+      const deathLinesByKind = {
+        wall: [
+          "Het veld heeft grenzen. Jij niet.",
+          "Buiten de lijnen. Vrije bal.",
+          "Gevlogen tegen het plafond. Typisch.",
+          "Je krat kent geen remmen.",
+          "Omhoog is ook een richting. De verkeerde.",
+          "Zelfs de lucht heeft een einde."
+        ],
+        stick: [
+          "Eigen stick, eigen schuld.",
+          "De stick had geen medelijden.",
+          "Geraakt door eigen materiaal. Het voelt extra erg.",
+          "Strafcorner. Wegens slecht kijken.",
+          "Typisch. Eigen materiaal, eigen graf.",
+          "Steken en stikken gaan hand in hand."
+        ],
+        pylon: [
+          "Gestrand op een pion. Dat is beschamend.",
+          "Een pion heeft je gestopt. Denk daar maar eens over na.",
+          "Kleiner dan een pion. Dat is je krat nu.",
+          "Pionnen zijn er voor een reden. Je weet nu welke.",
+          "Overwonnen door plastic kegeltje.",
+          "Je verloor van trainingsobstakels. Van trainingsobstakels."
+        ],
+        ball: [
+          "Hockeybal 1, krat 0.",
+          "Geraakt door de bal. Klassiek.",
+          "Bal in het gezicht. Helm had geholpen.",
+          "De bal mist nooit zijn doel.",
+          "Eigen bal, eigen schuld. Min of meer.",
+          "Schot in doel. Verkeerd doel."
+        ],
+        bag: [
+          "Neergeslagen door een tas vol vuile sportsokken.",
+          "De equipmentbag eist respect.",
+          "Bewust in de tas gevlogen? Lijkt erop.",
+          "De bag weegt meer dan je ego nu.",
+          "Krat vs. tas. Tas wint. Altijd.",
+          "Er zat een keeper in die tas. Misschien."
+        ]
+      };
+
+      const deathLinesByScore = {
+        zero: [
+          "Nul. Echt nul.",
+          "Niet eens één krat geflapped.",
+          "Record gevestigd. Het verkeerde.",
+          "De dug-out heeft gezwegen. Van schaamte.",
+          "Minder punten dan een lege training."
+        ],
+        low: [
+          "Minder kraten dan een keeper handschoenen heeft.",
+          "Amper verder dan de aftrap.",
+          "Je hebt het geprobeerd. Meer kan ik er niet van maken.",
+          "Dit was... iets.",
+          "Volgende keer lager insteken."
+        ],
+        mid: [
+          "Ruim onvoldoende. Maar je leeft tenminste nog.",
+          "De Spiritueel Leider keek even weg.",
+          "Dat was geen sprong, dat was administratie.",
+          "Je kratcontrole is matig.",
+          "Redelijk. Op een slechte dag.",
+          "De dug-out wil afstand nemen van deze actie.",
+          "Het krat had geen bitje in."
+        ],
+        good: [
+          "Niet slecht. Niet goed. Gewoon middelmatig.",
+          "De Spiritueel Leider knikte vaag.",
+          "Dit geeft aanvoerdersambitie. Maar nog niet.",
+          "Best okee, zeg maar.",
+          "Hier doe je het voor, toch?"
+        ],
+        great: [
+          "Respect. Echt. Maar ook: krat gevallen.",
+          "Je hebt meer dan 25 gehaald. En toch verloren.",
+          "Dit was eigenlijk best goed. Het krat zag dat anders.",
+          "Aanvoerder waardig. Bijna.",
+          "De dug-out applaudisseert. Zachtjes.",
+          "Indrukwekkend. Voor een krat."
+        ]
+      };
+
+      const startTaglines = [
+        "Een schrale kutgame voor tussen twee HO-kratten in.",
+        "Officieel goedgekeurd door niemand.",
+        "Tap om de eer van de vereniging te redden.",
+        "Getest op echte krat-handlers.",
+        "Gemaakt in een kwartier. Gespeeld in een eeuwigheid.",
+        "Je krat, jouw verantwoordelijkheid.",
+        "Flap of flop. Jij kiest.",
+        "Hockeyskills niet vereist. Wel handig.",
+        "Ook leuk als je verliest. Niet echt.",
+        "De Spiritueel Leider kijkt toe."
       ];
+
+      const milestoneTexts = {
+        5:  "5! Lekker bezig!",
+        10: "10! Nu komt het!",
+        15: "15! De dug-out leeft op!",
+        20: "20! Aanvoerder worthy!",
+        25: "25! Ben je serieus?!",
+        30: "30! Belachelijk goed",
+        40: "40! Heb je dit geoefend?!",
+        50: "50! Opgave aanvaard"
+      };
+
+      function pickDeathLine(s, kind) {
+        if (kind && Math.random() < 0.6) {
+          const arr = deathLinesByKind[kind] || deathLinesByKind.wall;
+          return arr[Math.floor(Math.random() * arr.length)];
+        }
+        let arr;
+        if (s === 0) arr = deathLinesByScore.zero;
+        else if (s <= 4) arr = deathLinesByScore.low;
+        else if (s <= 14) arr = deathLinesByScore.mid;
+        else if (s <= 24) arr = deathLinesByScore.good;
+        else arr = deathLinesByScore.great;
+        return arr[Math.floor(Math.random() * arr.length)];
+      }
+
+      function refreshTagline() {
+        const el = document.getElementById("startTagline");
+        if (el) el.textContent = startTaglines[Math.floor(Math.random() * startTaglines.length)];
+      }
 
       function clamp(n, a, b) {
         return Math.max(a, Math.min(b, n));
@@ -542,13 +705,6 @@
         const weekTop = [...weekScores].sort((a, b) => b.score - a.score || a.ts - b.ts).slice(0, 5);
         renderList(allTimeList, allTop, "nog niks");
         renderList(weekList, weekTop, "nog niks");
-
-        if (weekScores.length) {
-          const worst = [...weekScores].sort((a, b) => a.score - b.score || a.ts - b.ts)[0];
-          worstWeek.textContent = `Slechtste van de week: ${worst.name} met ${worst.score}. Klein applausje.`;
-        } else {
-          worstWeek.textContent = "Slechtste van de week: nog niemand heeft zich vernederd.";
-        }
       }
 
       async function updateBoards() {
@@ -558,11 +714,6 @@
           const data = await res.json();
           renderList(allTimeList, data.allTimeTop || [], "nog niks");
           renderList(weekList, data.weekTop || [], "nog niks");
-          if (data.weekWorst) {
-            worstWeek.textContent = `Slechtste van de week: ${escapeHtml(data.weekWorst.name)} met ${data.weekWorst.score}. Klein applausje.`;
-          } else {
-            worstWeek.textContent = "Slechtste van de week: nog niemand heeft zich vernederd.";
-          }
         } catch {
           updateBoardsLocal();
         }
@@ -613,6 +764,8 @@
         dead = false;
         t = 0;
         score = 0;
+        lastKillKind = null;
+        lastMilestone = 0;
         nextObstacleIn = 0.65;
         obstacles = [];
         particles = [];
@@ -682,6 +835,10 @@
             o.passed = true;
             score += 1;
             scoreText.textContent = String(score);
+            if (milestoneTexts[score] && score > lastMilestone) {
+              lastMilestone = score;
+              showToast(milestoneTexts[score]);
+            }
           }
         }
         obstacles = obstacles.filter(o => o.x > -130);
@@ -695,6 +852,7 @@
         shake = Math.max(0, shake - dt * 18);
 
         if (player.y < 54 || player.y + player.h > H - 54) {
+          lastKillKind = "wall";
           crash();
           return;
         }
@@ -704,6 +862,7 @@
           const topRect = { x: o.x, y: 0, w: o.w, h: o.gapY };
           const botRect = { x: o.x, y: o.gapY + o.gap, w: o.w, h: H - (o.gapY + o.gap) };
           if (hit(pr, topRect) || hit(pr, botRect)) {
+            lastKillKind = o.kind;
             crash();
             return;
           }
@@ -729,11 +888,14 @@
         running = false;
         shake = 12;
         const name = cleanName(playerNameInput.value);
+        const prevBest = getPersonalBest(name);
         saveScore(name, score);
         submitScoreToApi(name, score);
         updateBoards();
+        const isPB = score > 0 && score > prevBest;
         finalScore.textContent = score;
-        deathLine.textContent = deathLines[Math.floor(Math.random() * deathLines.length)];
+        pbLineEl.textContent = isPB ? "Nieuw persoonlijk record!" : "";
+        deathLine.textContent = pickDeathLine(score, lastKillKind);
         setTimeout(() => gameOverScreen.classList.add("show"), 330);
       }
 
@@ -994,6 +1156,7 @@
       function goMenu() {
         gameOverScreen.classList.remove("show");
         startScreen.classList.add("show");
+        refreshTagline();
         updateBoards();
       }
 
@@ -1026,6 +1189,7 @@
       const savedName = localStorage.getItem(NAME_KEY);
       playerNameInput.value = savedName ? cleanName(savedName) : "KRATHELD";
       resize();
+      refreshTagline();
       updateBoards();
       requestAnimationFrame(bootDraw);
     })();
