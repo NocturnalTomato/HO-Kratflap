@@ -534,7 +534,7 @@
         return String(s).replace(/[&<>'"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;","'":"&#39;","\"":"&quot;"}[c]));
       }
 
-      function updateBoards() {
+      function updateBoardsLocal() {
         const scores = getScores();
         const thisWeek = weekId();
         const weekScores = scores.filter(s => s.week === thisWeek);
@@ -548,6 +548,23 @@
           worstWeek.textContent = `Slechtste van de week: ${worst.name} met ${worst.score}. Klein applausje.`;
         } else {
           worstWeek.textContent = "Slechtste van de week: nog niemand heeft zich vernederd.";
+        }
+      }
+
+      async function updateBoards() {
+        try {
+          const res = await fetch(API_BASE + "/scores");
+          if (!res.ok) throw new Error("not ok");
+          const data = await res.json();
+          renderList(allTimeList, data.allTimeTop || [], "nog niks");
+          renderList(weekList, data.weekTop || [], "nog niks");
+          if (data.weekWorst) {
+            worstWeek.textContent = `Slechtste van de week: ${escapeHtml(data.weekWorst.name)} met ${data.weekWorst.score}. Klein applausje.`;
+          } else {
+            worstWeek.textContent = "Slechtste van de week: nog niemand heeft zich vernederd.";
+          }
+        } catch {
+          updateBoardsLocal();
         }
       }
 
