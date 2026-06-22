@@ -362,7 +362,7 @@
           </div>
           <div class="worst" id="worstWeek"></div>
           <button class="secondary danger-lite" id="resetScoresBtn" type="button">Wis lokale highscores</button>
-          <p class="tiny">Testversie: highscores staan alleen op deze telefoon/browser via localStorage.</p>
+          <p class="tiny">Highscores worden ook gesynchroniseerd naar de HO-Krat app.</p>
         </div>
       </div>
 
@@ -400,12 +400,14 @@
       const deathLine = document.getElementById("deathLine");
       const resetScoresBtn = document.getElementById("resetScoresBtn");
 
+      const API_BASE = "https://ho-kratflap-api.lucdegoeij.workers.dev";
       const STORAGE_KEY = "hokrat_kratflap_scores_v2";
       const OLD_STORAGE_KEY = "hokrat_kratflap_scores_v1";
       const NAME_KEY = "hokrat_kratflap_name_v1";
       const MAX_NAME_LENGTH = 10;
       const MAX_STORED_SCORES = 300;
 
+      let sessionToken = null;
       let W = 0;
       let H = 0;
       let DPR = 1;
@@ -562,6 +564,33 @@
         player.x = W * 0.27;
       }
 
+      async function fetchSessionToken() {
+        try {
+          const res = await fetch(API_BASE + "/session");
+          if (res.ok) {
+            const data = await res.json();
+            sessionToken = data.token || null;
+          }
+        } catch {
+          sessionToken = null;
+        }
+      }
+
+      async function submitScoreToApi(name, points) {
+        if (!sessionToken) return;
+        const token = sessionToken;
+        sessionToken = null;
+        try {
+          await fetch(API_BASE + "/scores", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ token, name, score: points })
+          });
+        } catch {
+          // silently ignore network errors
+        }
+      }
+
       function resetGame() {
         running = true;
         dead = false;
@@ -578,6 +607,7 @@
         startScreen.classList.remove("show");
         gameOverScreen.classList.remove("show");
         lastTime = performance.now();
+        fetchSessionToken();
         requestAnimationFrame(loop);
       }
 
@@ -683,6 +713,7 @@
         shake = 12;
         const name = cleanName(playerNameInput.value);
         saveScore(name, score);
+        submitScoreToApi(name, score);
         updateBoards();
         finalScore.textContent = score;
         deathLine.textContent = deathLines[Math.floor(Math.random() * deathLines.length)];
