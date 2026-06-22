@@ -910,16 +910,18 @@
         const text = `${n} haalde ${s} bij HO Kratflap 🏑 Durf jij het beter?`;
         const url = location.href.split("?")[0];
         try {
-          if (navigator.share) {
-            await navigator.share({ title: "HO Kratflap", text, url });
-          } else {
+          if (!navigator.share) throw new Error("Web Share API unavailable");
+          await navigator.share({ title: "HO Kratflap", text, url });
+          shareBtn.textContent = "Gedeeld!";
+        } catch {
+          try {
             await navigator.clipboard.writeText(`${text}\n${url}`);
             shareBtn.textContent = "Gekopieerd!";
-            setTimeout(() => { shareBtn.textContent = "Deel score"; }, 2000);
+          } catch {
+            shareBtn.textContent = "Kon niet kopiëren";
           }
-        } catch {
-          // user cancelled or no clipboard access — silently ignore
         }
+        setTimeout(() => { shareBtn.textContent = "Deel score"; }, 2000);
       });
 
       function draw() {
