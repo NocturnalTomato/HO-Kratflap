@@ -1,0 +1,12 @@
+name = "homey-script-runner"
+main = "src/index.js"
+compatibility_date = "2025-07-01"
+
+# Uses the default workers.dev subdomain (no custom route configured).
+# To bind a custom domain instead, add e.g.:
+# routes = [
+#   { pattern = "homey-script.example.com/*", custom_domain = true }
+# ]
+
+[observability]
+enabled = true

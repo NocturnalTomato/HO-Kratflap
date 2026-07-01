@@ -1,0 +1,16 @@
+{
+  "name": "homey-script-runner",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Cloudflare Worker that executes HomeyScript snippets remotely and returns captured console.log output plus the script result.",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "tail": "wrangler tail",
+    "secret:set": "wrangler secret put AUTH_TOKEN",
+    "test:local": "curl -s -X POST http://127.0.0.1:8787 -H \"Content-Type: application/json\" -H \"X-Auth-Token: $AUTH_TOKEN\" -d '{\"script\": \"console.log(1+1); return 42;\"}'"
+  },
+  "devDependencies": {
+    "wrangler": "^4.4.0"
+  }
+}
