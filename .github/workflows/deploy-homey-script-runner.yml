@@ -1,0 +1,27 @@
+name: Deploy Homey Script Runner Worker
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "homey-script-runner/**"
+      - ".github/workflows/deploy-homey-script-runner.yml"
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Deploy Worker
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CF_API_TOKEN }}
+          workingDirectory: homey-script-runner
+          secrets: |
+            AUTH_TOKEN
+        env:
+          AUTH_TOKEN: ${{ secrets.HOMEY_SCRIPT_AUTH_TOKEN }}
