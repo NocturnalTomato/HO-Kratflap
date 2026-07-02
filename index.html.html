@@ -853,7 +853,8 @@
         particles = particles.filter(p => p.life > 0);
         shake = Math.max(0, shake - dt * 18);
 
-        if (player.y < 54 || player.y + player.h > H - 54) {
+        const halfH = player.h * 0.43;
+        if (player.y - halfH < 0 || player.y + halfH > H - 48) {
           lastKillKind = "wall";
           crash();
           return;
